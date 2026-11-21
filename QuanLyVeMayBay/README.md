@@ -1062,3 +1062,69 @@ Qua quá trình rà soát toàn bộ mã nguồn thực tế của dự án, dư
    - Trong code đã có logic kiểm tra trạng thái `'Đã hủy'` ở các câu lệnh SELECT và chốt chặn thanh toán, tuy nhiên giao diện người dùng hiện tại **chưa có nút bấm "Hủy vé"** hoặc "Hoàn tiền".
 4. **Về kiến trúc phân tầng:**
    - Dự án đang áp dụng mô hình hướng sự kiện trực tiếp: Các Form WinForms gọi trực tiếp tới lớp `Database` và thực thi ADO.NET, chưa phân tách thành các tầng chuyên biệt như BLL (Business Logic Layer) hay DTO (Data Transfer Object). Đây là mô hình kinh điển, trực quan, rất phù hợp và phổ biến cho sinh viên mới học bộ môn Lập trình trực quan / Lập trình Windows Forms với C#.
+
+
+---
+
+## 10. HỆ THỐNG PHÂN QUYỀN 5 FORM CHÍNH CHO 5 ACCOUNT
+
+Hệ thống đã được tái cấu trúc và phân chia thành **5 Form nghiệp vụ chuyên biệt** tương ứng với 5 vai trò tài khoản nhân viên, khởi đầu từ **Màn hình Đăng nhập (`frmDangNhap.cs`)**.
+
+### Danh sách 5 Tài khoản mẫu mặc định
+
+| STT | Tài khoản (Username) | Mật khẩu (Password) | Họ tên Nhân viên | Chức vụ / Quyền | Quê quán | Form chính tương ứng |
+|:---:|:---|:---|:---|:---|:---|:---|
+| 1 | `admin` | `123456` | Nguyễn Quản Trị | **Admin** | Hà Nội | `frmAdmin.cs` |
+| 2 | `cskh` | `123456` | Trần Chăm Sóc | **NhanVienCSKH** | Đà Nẵng | `frmNhanVienCSKH.cs` |
+| 3 | `ketoan` | `123456` | Lê Kế Toán | **NhanVienKeToan** | TP. Hồ Chí Minh | `frmNhanVienKeToan.cs` |
+| 4 | `datve` | `123456` | Phạm Đặt Vé | **NhanVienDatVe** | Hải Phòng | `frmNhanVienDatVe.cs` |
+| 5 | `qlcb` | `123456` | Hoàng Chuyến Bay | **NhanVienQuanLyChuyenBay** | Cần Thơ | `frmNhanVienQuanLyChuyenBay.cs` |
+
+> [!TIP]
+> Tại màn hình Đăng nhập (`frmDangNhap`), hệ thống đã tích hợp sẵn khu vực **"⚡ Demo Fast Login"** với 5 nút bấm nhanh tương ứng 5 vai trò. Giảng viên và người kiểm thử chỉ cần nhấn 1 nút là hệ thống tự điền thông tin và đăng nhập ngay lập tức.
+> Trên mỗi Form chính đều có thanh **Top Bar** hiển thị thông tin nhân viên đăng nhập cùng nút **"🚪 Đăng xuất"** để quay về màn hình đăng nhập và chuyển đổi tài khoản bất kỳ lúc nào.
+
+### Chi tiết các Nghiệp vụ của 5 Form chính:
+
+1. **Bộ phận Đặt vé (`frmNhanVienDatVe.cs`):**
+   - **Tìm kiếm chuyến bay:** Lọc theo sân bay đi, sân bay đến, ngày bay.
+   - **Xem thông tin chuyến bay:** Hiển thị chi tiết hành trình, giờ bay, giá vé, hãng tàu bay.
+   - **Kiểm tra ghế trống:** Xem sơ đồ ghế trống theo chuyến bay, lọc hạng Thương gia / Phổ thông, đếm số ghế còn trống thực tế.
+   - **Nhập thông tin khách hàng:** Kiểm tra tính hợp lệ bằng Regular Expressions (Họ tên chữ cái, CCCD đúng 12 số, SĐT đúng 10 số, Email chuẩn).
+   - **Đặt vé:** Transaction kiểm tra ghế trống chống trùng lắp, lưu thông tin khách hàng vào `KHACHHANG`, tạo vé mới vào `VE` với trạng thái `'Chờ thanh toán'`.
+   - **Xác nhận đặt vé (chuyển Kế toán):** Tab quản lý danh sách vé chờ xác nhận từ Kế toán, nút kiểm tra tiến độ xác nhận từ kế toán, và nút in Phiếu đặt chỗ/Boarding pass đưa cho khách sang quầy thanh toán.
+
+2. **Bộ phận Chăm sóc khách hàng (`frmNhanVienCSKH.cs`):**
+   - **Tra cứu vé (Xem thông tin vé):** Tìm kiếm đa năng theo Mã vé, Họ tên, SĐT, CCCD, Mã chuyến bay; xem chi tiết toàn diện thông tin vé và hành khách.
+   - **Tiếp nhận yêu cầu:** Ghi nhận và theo dõi các yêu cầu khách hàng (Đổi chuyến bay, Đổi ghế ngồi, Hủy vé, Thay đổi thông tin, Hỗ trợ dịch vụ) vào bảng `YEUCAU_CSKH`.
+   - **Thay đổi vé:**
+     - *Đổi ghế ngồi:* Chọn ghế trống khác trên cùng chuyến bay và cập nhật vé.
+     - *Đổi chuyến bay:* Chọn chuyến bay mới, chọn ghế trống mới, tính toán tiền chênh lệch (nếu có) và cập nhật vé.
+   - **Hủy vé:** Xác nhận hủy vé, cập nhật trạng thái vé thành `'Đã hủy'`, giải phóng ghế về trạng thái trống cho khách khác đặt lại, ghi nhận hoàn tiền trong `THANHTOAN`.
+
+3. **Bộ phận Kế toán (`frmNhanVienKeToan.cs`):**
+   - **Kiểm tra thanh toán:** Tra cứu danh sách vé chờ thanh toán hoặc đã thanh toán, kiểm tra chi tiết số tiền và thông tin giao dịch.
+   - **Xác nhận thanh toán:** Khóa bản ghi vé bằng `FOR UPDATE` chống Race Condition, ghi nhận thanh toán vào bảng `THANHTOAN`, chuyển trạng thái vé thành `'Đã thanh toán'`.
+   - **Lập hóa đơn:** Tự động hoặc thủ công xuất hóa đơn vào bảng `HOADON` cho các giao dịch đã thanh toán.
+   - **Quản lý hóa đơn:** Tra cứu hóa đơn theo ngày, mã hóa đơn, tên khách; xem chi tiết và in mẫu hóa đơn điện tử VAT chuẩn có thuật toán đọc số tiền thành chữ tiếng Việt (`DocTienBangChu`).
+   - **Thống kê doanh thu:** 4 thẻ KPI tóm tắt, thống kê doanh thu theo phương thức thanh toán (Tiền mặt, Chuyển khoản, Thẻ, Ví điện tử), thống kê theo tuyến bay, lọc theo các mốc thời gian (Hôm nay, 7 ngày qua, Tháng này, Năm nay).
+
+4. **Bộ phận Quản lý chuyến bay (`frmNhanVienQuanLyChuyenBay.cs`):**
+   - **Thêm chuyến bay:** Chọn máy bay, sân bay đi/đến (12 sân bay chuẩn, chống trùng nhau), thời gian đi/đến (thời gian đến > thời gian đi), giá vé số dương.
+   - **Sửa chuyến bay:** Chỉnh sửa thông tin lịch trình bay của chuyến bay được chọn.
+   - **Xóa chuyến bay:** Hỏi xác nhận kỹ; kiểm tra nếu chuyến bay đã có vé đặt thì cảnh báo ngăn xóa để đảm bảo toàn vẹn dữ liệu.
+   - **Cập nhật thông tin chuyến bay:** Cập nhật trạng thái chuyến bay; nút tự động quét cập nhật trạng thái theo giờ thực tế (`ThoiGianDi <= NOW()`).
+   - **Cập nhật tình trạng ghế:** Xem danh sách ghế của từng tàu bay; cho phép đổi trạng thái ghế sang `'Đang bảo trì'` hoặc `'Hỏng / Khóa'` (để khách không thể đặt nhầm ghế hỏng); nút khôi phục toàn bộ ghế sẵn sàng; nút sinh lại ghế mẫu.
+
+5. **Quản trị viên (`frmAdmin.cs`):**
+   - **Nút báo cáo (Hiện biểu đồ):**
+     - 4 thẻ KPI tổng thể: Doanh thu toàn hãng, Số chuyến bay, Số vé bán, Số nhân sự.
+     - Nút "TẠO BÁO CÁO & HIỆN BIỂU ĐỒ": Vẽ biểu đồ cột hiện đại bằng đồ họa GDI+ trực quan theo từng tuyến bay, nhãn số liệu và trục tọa độ rõ nét.
+     - Bảng tóm tắt chỉ số điều hành và nút xuất báo cáo tổng hợp.
+   - **Xem danh sách các chuyến bay (Không thao tác chỉ xem):** Chế độ Read-only dành riêng cho Admin giám sát lịch trình bay toàn hãng với đầy đủ bộ lọc nơi đi, nơi đến, trạng thái; không có nút thêm, sửa, xóa.
+   - **Quản lý nhân viên:**
+     - Check ID / Tra cứu nhân viên theo Mã NV (ID), Tên đăng nhập, Tên nhân viên, Quê quán, Chức vụ.
+     - Thêm mới nhân viên vào bảng `NHANVIEN`.
+     - Sửa thông tin nhân viên (Mật khẩu, Họ tên, Quê quán, SĐT).
+     - Xóa nhân viên (có cơ chế ngăn chặn Admin tự xóa chính tài khoản đang đăng nhập).
+     - Thay đổi quyền của nhân viên (phân quyền linh hoạt giữa 5 chức vụ).

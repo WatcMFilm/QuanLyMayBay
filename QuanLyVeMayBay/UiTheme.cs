@@ -95,7 +95,7 @@ namespace QuanLyVeMayBay
             dgv.MultiSelect = false;
             dgv.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             dgv.RowTemplate.Height = 36;
-            dgv.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            dgv.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
 
             // Header tối màu sang trọng
             dgv.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
@@ -122,6 +122,44 @@ namespace QuanLyVeMayBay
             dgv.AlternatingRowsDefaultCellStyle.SelectionForeColor = Color.FromArgb(3, 105, 161);
         }
 
+        // Cấu hình an toàn cho cột DataGridView tránh null reference
+        public static void SetCol(DataGridView dgv, string name, string header, int width = 0, DataGridViewContentAlignment align = DataGridViewContentAlignment.NotSet, string? format = null, bool visible = true)
+        {
+            try
+            {
+                if (dgv == null || !dgv.Columns.Contains(name)) return;
+                DataGridViewColumn? col = dgv.Columns[name];
+                if (col == null) return;
+
+                col.Visible = visible;
+                if (!string.IsNullOrEmpty(header)) col.HeaderText = header;
+
+                if (width > 0)
+                {
+                    col.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+                    col.Width = width;
+                }
+                else
+                {
+                    col.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+                }
+
+                if (align != DataGridViewContentAlignment.NotSet)
+                {
+                    col.DefaultCellStyle.Alignment = align;
+                }
+
+                if (!string.IsNullOrEmpty(format))
+                {
+                    col.DefaultCellStyle.Format = format;
+                }
+            }
+            catch
+            {
+                // Phòng ngừa lỗi nội bộ WinForms .NET 10 khi tính toán kích thước cột
+            }
+        }
+
         // Tô màu Badge trực quan cho cột trạng thái
         public static void FormatStatusCell(DataGridViewCellFormattingEventArgs e, string statusColumnName, DataGridView dgv)
         {
@@ -131,8 +169,8 @@ namespace QuanLyVeMayBay
             string status = e.Value?.ToString() ?? "";
             if (string.IsNullOrWhiteSpace(status)) return;
 
-            // Đang mở / Mở
-            if (status.Contains("Đang mở") || status.Contains("Dang mo"))
+            // Đang mở / Mở / Hoạt động / Trong
+            if (status.Contains("Đang mở") || status.Contains("Dang mo") || status.Contains("Hoạt động") || status.Equals("Trong", StringComparison.OrdinalIgnoreCase))
             {
                 e.CellStyle.ForeColor = Color.FromArgb(21, 128, 61); // Green 700
                 e.CellStyle.BackColor = Color.FromArgb(220, 252, 231); // Green 100
@@ -152,27 +190,108 @@ namespace QuanLyVeMayBay
                 e.CellStyle.BackColor = Color.FromArgb(224, 242, 254); // Sky 100
                 e.CellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             }
-            // Hoàn tất / Đã thanh toán
-            else if (status.Contains("Hoàn tất") || status.Contains("Hoan tat") || status.Contains("Đã thanh toán") || status.Contains("Da thanh toan"))
+            // Hoàn tất / Đã thanh toán / Đã giải quyết / Đã xử lý / Thành công
+            else if (status.Contains("Hoàn tất") || status.Contains("Hoan tat") || status.Contains("Đã thanh toán") || status.Contains("Da thanh toan") || status.Contains("Đã giải quyết") || status.Contains("Đã xử lý") || status.Contains("Thành công"))
             {
                 e.CellStyle.ForeColor = Color.FromArgb(21, 128, 61); // Green 700
                 e.CellStyle.BackColor = Color.FromArgb(220, 252, 231); // Green 100
                 e.CellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             }
-            // Đã hủy
-            else if (status.Contains("Đã hủy") || status.Contains("Da huy"))
+            // Đã hủy / Hỏng / Khóa / Từ chối / Bảo trì
+            else if (status.Contains("Đã hủy") || status.Contains("Da huy") || status.Contains("Bảo trì") || status.Contains("Bao tri") || status.Contains("Hỏng") || status.Contains("Khóa") || status.Contains("Từ chối"))
             {
                 e.CellStyle.ForeColor = Color.FromArgb(185, 28, 28); // Red 700
                 e.CellStyle.BackColor = Color.FromArgb(254, 226, 226); // Red 100
                 e.CellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             }
-            // Chờ thanh toán (dành cho vé)
-            else if (status.Contains("Chờ thanh toán") || status.Contains("Cho thanh toan"))
+            // Chờ thanh toán (dành cho vé) / Đang xử lý / Tiếp nhận
+            else if (status.Contains("Chờ thanh toán") || status.Contains("Cho thanh toan") || status.Contains("Đang xử lý") || status.Contains("Tiếp nhận"))
             {
                 e.CellStyle.ForeColor = Color.FromArgb(146, 64, 14); // Yellow 800
                 e.CellStyle.BackColor = Color.FromArgb(254, 249, 195); // Yellow 100
                 e.CellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             }
+        }
+
+        // Tạo Top Bar Header đồng bộ cho cả 5 Form chính
+        public static Panel CreateTopBar(Form form, string title, string subtitle, EventHandler onLogoutClick)
+        {
+            Panel pnlTop = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 65,
+                BackColor = HeaderDark,
+                Padding = new Padding(15, 0, 15, 0)
+            };
+
+            Label lblTitle = new Label
+            {
+                Text = title,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 13.5f, FontStyle.Bold),
+                AutoSize = true,
+                Location = new Point(15, 12)
+            };
+
+            Label lblSubtitle = new Label
+            {
+                Text = subtitle,
+                ForeColor = Color.FromArgb(148, 163, 184), // Slate 400
+                Font = new Font("Segoe UI", 9f, FontStyle.Regular),
+                AutoSize = true,
+                Location = new Point(16, 38)
+            };
+
+            string userDisplay = SessionManager.CurrentUser != null
+                ? $"👤 {SessionManager.CurrentUser.HoTen} ({SessionManager.CurrentUser.TenChucVuTiengViet})"
+                : "👤 Khách";
+
+            Label lblUser = new Label
+            {
+                Text = userDisplay,
+                ForeColor = Color.FromArgb(224, 242, 254), // Light Sky
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                AutoSize = true,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right
+            };
+
+            Button btnLogout = new Button
+            {
+                Text = "🚪 Đăng xuất",
+                Size = new Size(110, 34),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnLogout.FlatAppearance.BorderSize = 0;
+            btnLogout.BackColor = Color.FromArgb(239, 68, 68); // Rose 500
+            btnLogout.ForeColor = Color.White;
+            btnLogout.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            btnLogout.Click += (s, e) =>
+            {
+                var confirm = MessageBox.Show("Bạn có chắc chắn muốn đăng xuất khỏi hệ thống?", "Xác nhận đăng xuất", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (confirm == DialogResult.Yes)
+                {
+                    onLogoutClick?.Invoke(s, e);
+                }
+            };
+
+            pnlTop.Controls.Add(lblTitle);
+            pnlTop.Controls.Add(lblSubtitle);
+            pnlTop.Controls.Add(lblUser);
+            pnlTop.Controls.Add(btnLogout);
+
+            pnlTop.Resize += (s, e) =>
+            {
+                btnLogout.Location = new Point(pnlTop.Width - btnLogout.Width - 15, 15);
+                lblUser.Location = new Point(btnLogout.Left - lblUser.Width - 20, 22);
+            };
+
+            btnLogout.Location = new Point(pnlTop.Width - btnLogout.Width - 15, 15);
+            lblUser.Location = new Point(Math.Max(150, btnLogout.Left - lblUser.Width - 20), 22);
+
+            form.Controls.Add(pnlTop);
+            return pnlTop;
         }
     }
 }

@@ -1,3 +1,7 @@
+using System;
+using System.Windows.Forms;
+using QuanLyVeMayBay.DAL;
+
 namespace QuanLyVeMayBay
 {
     internal static class Program
@@ -7,7 +11,12 @@ namespace QuanLyVeMayBay
         static void Main()
         {
             ApplicationConfiguration.Initialize();
-            Application.Run(new Form1());
+
+            // Khởi tạo và kiểm tra CSDL tự động
+            DbInitializer.InitializeDatabase();
+
+            // Mở form đăng nhập hệ thống
+            Application.Run(new frmDangNhap());
         }
     }
 }

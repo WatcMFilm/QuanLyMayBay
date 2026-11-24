@@ -45,6 +45,7 @@ namespace QuanLyVeMayBay
             pnlActionsYeuCau = new Panel();
             btnLamMoiDsYc = new Button();
             btnTuChoiYc = new Button();
+            btnXoaYc = new Button();
             btnXuLyHoanTat = new Button();
             grpTiepNhanMoi = new GroupBox();
             btnLamMoiNhapYc = new Button();
@@ -387,6 +388,7 @@ namespace QuanLyVeMayBay
             pnlActionsYeuCau.BackColor = Color.White;
             pnlActionsYeuCau.Controls.Add(btnLamMoiDsYc);
             pnlActionsYeuCau.Controls.Add(btnTuChoiYc);
+            pnlActionsYeuCau.Controls.Add(btnXoaYc);
             pnlActionsYeuCau.Controls.Add(btnXuLyHoanTat);
             pnlActionsYeuCau.Dock = DockStyle.Bottom;
             pnlActionsYeuCau.Location = new Point(8, 538);
@@ -419,6 +421,19 @@ namespace QuanLyVeMayBay
             btnTuChoiYc.Text = "⛔ Từ chối yêu cầu";
             btnTuChoiYc.UseVisualStyleBackColor = true;
             btnTuChoiYc.Click += btnTuChoiYc_Click;
+            // 
+            // btnXoaYc
+            // 
+            btnXoaYc.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnXoaYc.Cursor = Cursors.Hand;
+            btnXoaYc.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
+            btnXoaYc.Location = new Point(80, 8);
+            btnXoaYc.Name = "btnXoaYc";
+            btnXoaYc.Size = new Size(120, 40);
+            btnXoaYc.TabIndex = 3;
+            btnXoaYc.Text = "🗑️ Xóa yêu cầu";
+            btnXoaYc.UseVisualStyleBackColor = true;
+            btnXoaYc.Click += btnXoaYc_Click;
             // 
             // btnXuLyHoanTat
             // 
@@ -628,6 +643,7 @@ namespace QuanLyVeMayBay
         private Panel pnlActionsYeuCau;
         private Button btnXuLyHoanTat;
         private Button btnTuChoiYc;
+        private Button btnXoaYc;
         private Button btnLamMoiDsYc;
     }
 }

@@ -57,6 +57,7 @@ namespace QuanLyVeMayBay
             grpThaoTacGhe = new GroupBox();
             lblHuongDanGhe = new Label();
             btnSinhGheMau = new Button();
+            btnXoaGhe = new Button();
             btnKhoiPhucTatCaGhe = new Button();
             btnCapNhatGhe = new Button();
             cboTrangThaiGheMoi = new ComboBox();
@@ -516,6 +517,7 @@ namespace QuanLyVeMayBay
             grpThaoTacGhe.BackColor = Color.White;
             grpThaoTacGhe.Controls.Add(lblHuongDanGhe);
             grpThaoTacGhe.Controls.Add(btnSinhGheMau);
+            grpThaoTacGhe.Controls.Add(btnXoaGhe);
             grpThaoTacGhe.Controls.Add(btnKhoiPhucTatCaGhe);
             grpThaoTacGhe.Controls.Add(btnCapNhatGhe);
             grpThaoTacGhe.Controls.Add(cboTrangThaiGheMoi);
@@ -524,7 +526,7 @@ namespace QuanLyVeMayBay
             grpThaoTacGhe.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
             grpThaoTacGhe.Location = new Point(10, 0);
             grpThaoTacGhe.Name = "grpThaoTacGhe";
-            grpThaoTacGhe.Size = new Size(438, 450);
+            grpThaoTacGhe.Size = new Size(438, 500);
             grpThaoTacGhe.TabIndex = 0;
             grpThaoTacGhe.TabStop = false;
             grpThaoTacGhe.Text = "⚙️ Thiết lập Trạng thái Ghế";
@@ -551,6 +553,19 @@ namespace QuanLyVeMayBay
             btnSinhGheMau.Text = "🔄 Tự động sinh lại ghế chuẩn cho tàu bay";
             btnSinhGheMau.UseVisualStyleBackColor = true;
             btnSinhGheMau.Click += btnSinhGheMau_Click;
+            // 
+            // btnXoaGhe
+            // 
+            btnXoaGhe.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            btnXoaGhe.Cursor = Cursors.Hand;
+            btnXoaGhe.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            btnXoaGhe.Location = new Point(20, 440);
+            btnXoaGhe.Name = "btnXoaGhe";
+            btnXoaGhe.Size = new Size(398, 42);
+            btnXoaGhe.TabIndex = 6;
+            btnXoaGhe.Text = "🗑️ Xóa ghế đang chọn";
+            btnXoaGhe.UseVisualStyleBackColor = true;
+            btnXoaGhe.Click += btnXoaGhe_Click;
             // 
             // btnKhoiPhucTatCaGhe
             // 
@@ -780,6 +795,7 @@ namespace QuanLyVeMayBay
         private Button btnCapNhatGhe;
         private Button btnKhoiPhucTatCaGhe;
         private Button btnSinhGheMau;
+        private Button btnXoaGhe;
         private Label lblHuongDanGhe;
     }
 }

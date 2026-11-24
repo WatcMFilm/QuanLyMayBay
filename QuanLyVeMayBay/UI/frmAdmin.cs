@@ -190,7 +190,8 @@ namespace QuanLyVeMayBay
             int w = pnlBieuDo.Width;
             int h = pnlBieuDo.Height;
 
-            if (_dtBieuDo == null || _dtBieuDo.Rows.Count == 0)
+            // Không có dữ liệu hoặc dữ liệu thiếu cột doanh thu -> hiện thông báo thay vì crash
+            if (_dtBieuDo == null || _dtBieuDo.Rows.Count == 0 || !_dtBieuDo.Columns.Contains("DoanhThuTrieu"))
             {
                 using Font fontEmpty = new Font("Segoe UI", 10f, FontStyle.Italic);
                 g.DrawString("Chưa có dữ liệu chuyến bay để vẽ biểu đồ.", fontEmpty, Brushes.Gray, 30, 30);
@@ -338,20 +339,23 @@ namespace QuanLyVeMayBay
 
             // Lọc theo sân bay đi nếu người dùng chọn
             if (cboLocDiAdmin.SelectedIndex >= 0)
-                sql += $" AND cb.SanBayDi LIKE '%{cboLocDiAdmin.Text.Split('-')[0].Trim()}%'";
+                sql += " AND cb.SanBayDi LIKE @di";
 
             // Lọc theo sân bay đến nếu người dùng chọn
             if (cboLocDenAdmin.SelectedIndex >= 0)
-                sql += $" AND cb.SanBayDen LIKE '%{cboLocDenAdmin.Text.Split('-')[0].Trim()}%'";
+                sql += " AND cb.SanBayDen LIKE @den";
 
             // Lọc theo trạng thái nếu người dùng chọn
             if (cboLocTrangThaiCb.SelectedIndex > 0)
-                sql += $" AND cb.TrangThai = '{cboLocTrangThaiCb.Text}'";
+                sql += " AND cb.TrangThai = @tt";
 
             sql += " ORDER BY cb.ThoiGianDi ASC;";
 
-            // Bước 2: Thực thi truy vấn và đổ dữ liệu vào DataGridView
-            dgvChuyenBayAdmin.DataSource = Database.GetData(sql);
+            // Bước 2: Thực thi truy vấn (dùng tham số, không ghép chuỗi) và đổ dữ liệu vào DataGridView
+            dgvChuyenBayAdmin.DataSource = Database.GetData(sql,
+                new MySqlParameter("@di", $"%{cboLocDiAdmin.Text.Split('-')[0].Trim()}%"),
+                new MySqlParameter("@den", $"%{cboLocDenAdmin.Text.Split('-')[0].Trim()}%"),
+                new MySqlParameter("@tt", cboLocTrangThaiCb.Text));
 
             // Bước 3: Đặt tiêu đề tiếng Việt cho các cột trong bảng
             UiTheme.SetCol(dgvChuyenBayAdmin, "MaChuyenBay", "Mã CB", width: 65, align: DataGridViewContentAlignment.MiddleCenter);
@@ -389,13 +393,13 @@ namespace QuanLyVeMayBay
             // Nếu có từ khóa tìm kiếm (Check ID, tên, quê quán, chức vụ)
             if (!string.IsNullOrEmpty(tuKhoa))
             {
-                sql += $" AND (MaNV LIKE '%{tuKhoa}%' OR HoTen LIKE '%{tuKhoa}%' OR TenDangNhap LIKE '%{tuKhoa}%' OR QueQuan LIKE '%{tuKhoa}%' OR ChucVu LIKE '%{tuKhoa}%')";
+                sql += " AND (MaNV LIKE @tk OR HoTen LIKE @tk OR TenDangNhap LIKE @tk OR QueQuan LIKE @tk OR ChucVu LIKE @tk)";
             }
 
             sql += " ORDER BY MaNV ASC;";
 
-            // Bước 2: Lấy dữ liệu và đổ vào DataGridView
-            dgvNhanVien.DataSource = Database.GetData(sql);
+            // Bước 2: Lấy dữ liệu và đổ vào DataGridView (từ khóa truyền qua tham số để chống SQL Injection)
+            dgvNhanVien.DataSource = Database.GetData(sql, new MySqlParameter("@tk", $"%{tuKhoa}%"));
 
             // Bước 3: Đặt tiêu đề tiếng Việt cho các cột
             UiTheme.SetCol(dgvNhanVien, "MaNV", "Mã NV (ID)", width: 85, align: DataGridViewContentAlignment.MiddleCenter);
@@ -456,6 +460,18 @@ namespace QuanLyVeMayBay
                 return;
             }
 
+            if (!KiemTraSoDienThoai()) return;
+
+            // UC01: Tên đăng nhập phải là duy nhất
+            long trung = Database.ToLong(Database.ExecuteScalar("SELECT COUNT(*) FROM NHANVIEN WHERE TenDangNhap = @u;",
+                new MySqlParameter("@u", txtTenDangNhap.Text.Trim())));
+            if (trung > 0)
+            {
+                MessageBox.Show("Tên đăng nhập này đã tồn tại, vui lòng chọn tên khác!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                txtTenDangNhap.Focus();
+                return;
+            }
+
             try
             {
                 // Bước 2: Viết câu lệnh INSERT INTO
@@ -492,6 +508,16 @@ namespace QuanLyVeMayBay
                 MessageBox.Show("Vui lòng chọn một nhân viên trong bảng để sửa!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
+
+            // Mật khẩu/Họ tên rỗng sẽ làm nhân viên không đăng nhập được nữa
+            if (string.IsNullOrWhiteSpace(txtMatKhau.Text) || string.IsNullOrWhiteSpace(txtHoTen.Text))
+            {
+                MessageBox.Show("Mật khẩu và Họ tên không được để trống!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (!KiemTraSoDienThoai()) return;
+            if (!KiemTraKhongTuHaQuyen(cboChucVu.Text)) return;
 
             try
             {
@@ -568,6 +594,8 @@ namespace QuanLyVeMayBay
             }
 
             string chucVuMoi = cboChucVu.Text;
+            if (!KiemTraKhongTuHaQuyen(chucVuMoi)) return;
+
             if (MessageBox.Show($"Xác nhận đổi quyền của nhân viên #{_maNvChon} thành '{chucVuMoi}'?", "Xác nhận đổi quyền", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
             {
                 try
@@ -583,6 +611,30 @@ namespace QuanLyVeMayBay
                     MessageBox.Show("Lỗi: " + ex.Message, "Thông báo lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
+        }
+
+        // UC01: Số điện thoại (nếu nhập) phải gồm 10 chữ số, bắt đầu bằng 0
+        private bool KiemTraSoDienThoai()
+        {
+            string sdt = txtSoDienThoai.Text.Trim();
+            if (sdt != "" && !System.Text.RegularExpressions.Regex.IsMatch(sdt, @"^0\d{9}$"))
+            {
+                MessageBox.Show("Số điện thoại phải gồm 10 chữ số và bắt đầu bằng số 0!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                txtSoDienThoai.Focus();
+                return false;
+            }
+            return true;
+        }
+
+        // Không cho Admin đang đăng nhập tự đổi quyền của chính mình sang chức vụ khác (sẽ tự khóa mình khỏi trang quản trị)
+        private bool KiemTraKhongTuHaQuyen(string chucVuMoi)
+        {
+            if (SessionManager.CurrentUser != null && SessionManager.CurrentUser.MaNV == _maNvChon && chucVuMoi != "Admin")
+            {
+                MessageBox.Show("Bạn không thể tự đổi quyền của tài khoản Admin đang đăng nhập!", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+            return true;
         }
 
         // LÀM MỚI CÁC Ô NHẬP LIỆU

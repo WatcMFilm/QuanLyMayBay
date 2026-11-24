@@ -53,10 +53,20 @@ namespace QuanLyVeMayBay.DAL
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Nếu MySQL chưa bật hoặc lỗi kết nối, trả về dữ liệu mẫu dự phòng
-                dt = LayDuLieuMauDuPhong(sql, parameters);
+                if (LaLoiKetNoi(ex))
+                {
+                    // Nếu MySQL chưa bật hoặc lỗi kết nối, trả về dữ liệu mẫu dự phòng
+                    dt = LayDuLieuMauDuPhong(sql, parameters);
+                }
+                else
+                {
+                    // Lỗi câu lệnh SQL thật sự: báo cho người dùng thay vì che giấu bằng dữ liệu giả
+                    System.Windows.Forms.MessageBox.Show("Lỗi truy vấn CSDL: " + ex.Message, "Lỗi",
+                        System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Error);
+                    dt = new DataTable();
+                }
             }
             return dt;
         }
@@ -83,9 +93,7 @@ namespace QuanLyVeMayBay.DAL
             }
             catch (Exception ex)
             {
-                if (ex.Message.Contains("Unable to connect", StringComparison.OrdinalIgnoreCase) ||
-                    ex.Message.Contains("Access denied", StringComparison.OrdinalIgnoreCase) ||
-                    ex.Message.Contains("Connection refused", StringComparison.OrdinalIgnoreCase))
+                if (LaLoiKetNoi(ex))
                 {
                     return 1; // Giả lập thành công khi offline demo
                 }
@@ -115,12 +123,35 @@ namespace QuanLyVeMayBay.DAL
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                if (sql.Contains("COUNT", StringComparison.OrdinalIgnoreCase)) return 5L;
+                if (!LaLoiKetNoi(ex))
+                {
+                    // Lỗi SQL thật sự: không được trả về giá trị giả (có thể làm sai nghiệp vụ, ví dụ gán nhầm MaKH = 1)
+                    throw new Exception("Lỗi truy vấn CSDL: " + ex.Message);
+                }
+                // Chế độ demo offline (không kết nối được MySQL)
+                if (sql.Contains("COUNT", StringComparison.OrdinalIgnoreCase)) return 0L;
                 if (sql.Contains("SUM", StringComparison.OrdinalIgnoreCase)) return 18500000m;
-                return 1;
+                return null;
             }
+        }
+
+        // Nhận biết lỗi do không kết nối được MySQL (chế độ demo offline) để phân biệt với lỗi câu lệnh SQL
+        private static bool LaLoiKetNoi(Exception ex)
+        {
+            if (!DbInitializer.IsMySqlAvailable) return true;
+
+            for (Exception? e = ex; e != null; e = e.InnerException)
+            {
+                if (e is MySqlException me && (me.Number == 1042 || me.Number == 1045)) return true;
+                string msg = e.Message;
+                if (msg.Contains("Unable to connect", StringComparison.OrdinalIgnoreCase) ||
+                    msg.Contains("Access denied", StringComparison.OrdinalIgnoreCase) ||
+                    msg.Contains("Connection refused", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
         }
 
         // =========================================================================
@@ -187,9 +218,7 @@ namespace QuanLyVeMayBay.DAL
             }
             catch (Exception ex)
             {
-                if (ex.Message.Contains("Unable to connect", StringComparison.OrdinalIgnoreCase) ||
-                    ex.Message.Contains("Access denied", StringComparison.OrdinalIgnoreCase) ||
-                    ex.Message.Contains("Connection refused", StringComparison.OrdinalIgnoreCase))
+                if (LaLoiKetNoi(ex))
                 {
                     return new Random().Next(10, 99); // Giả lập sinh mã ID khi offline demo
                 }
@@ -204,6 +233,48 @@ namespace QuanLyVeMayBay.DAL
         {
             DataTable dt = new DataTable();
             string upperSql = sql.ToUpperInvariant();
+
+            // Các câu truy vấn có subquery chứa tên bảng khác (FROM VE, FROM CHUYENBAY...) phải được nhận diện trước,
+            // nếu không sẽ bị trả nhầm dữ liệu mẫu của bảng khác -> thiếu cột -> lỗi "Column ... does not belong to table"
+            if (upperSql.Contains("DOANHTHUTRIEU"))
+            {
+                // Biểu đồ doanh thu theo tuyến bay (frmAdmin)
+                dt.Columns.Add("TuyenBay", typeof(string));
+                dt.Columns.Add("DoanhThuTrieu", typeof(float));
+                dt.Rows.Add("HAN ➔ SGN", 8.5f);
+                dt.Rows.Add("SGN ➔ DAD", 4.2f);
+                dt.Rows.Add("HAN ➔ CXR", 3.1f);
+                dt.Rows.Add("DAD ➔ HAN", 1.8f);
+                dt.Rows.Add("SGN ➔ PQC", 0.9f);
+                return dt;
+            }
+
+            if (upperSql.Contains("FROM KHACHHANG"))
+            {
+                dt.Columns.Add("MaKH", typeof(int));
+                dt.Columns.Add("HoTen", typeof(string));
+                dt.Columns.Add("CCCD", typeof(string));
+                dt.Columns.Add("SDT", typeof(string));
+                dt.Columns.Add("Email", typeof(string));
+                dt.Columns.Add("SoVe", typeof(long));
+                dt.Rows.Add(1, "Nguyễn Văn An", "001200001234", "0912345678", "an.nguyen@gmail.com", 1L);
+                dt.Rows.Add(2, "Trần Thị Bình", "079201005678", "0987654321", "binh.tran@gmail.com", 1L);
+                return dt;
+            }
+
+            if (upperSql.Contains("FROM MAYBAY"))
+            {
+                dt.Columns.Add("MaMayBay", typeof(int));
+                dt.Columns.Add("TenMayBay", typeof(string));
+                dt.Columns.Add("TrangThai", typeof(string));
+                dt.Columns.Add("SoGhe", typeof(long));
+                dt.Columns.Add("SoChuyenBay", typeof(long));
+                dt.Rows.Add(1, "Boeing 787-9 Dreamliner", "Hoạt động", 10L, 2L);
+                dt.Rows.Add(2, "Airbus A321 Neo", "Hoạt động", 0L, 1L);
+                dt.Rows.Add(3, "Boeing 777-300ER", "Hoạt động", 0L, 1L);
+                dt.Rows.Add(4, "Airbus A350-900", "Hoạt động", 0L, 1L);
+                return dt;
+            }
 
             if (upperSql.Contains("FROM NHANVIEN"))
             {
@@ -340,17 +411,6 @@ namespace QuanLyVeMayBay.DAL
 
                 dt.Rows.Add(1, 1, "Nguyễn Văn An", "Đổi ghế ngồi", "Hành khách mong muốn đổi sang ghế cạnh cửa sổ", DateTime.Now.AddHours(-3), "Đang xử lý", "Đã tư vấn danh sách ghế trống cho khách");
                 dt.Rows.Add(2, 2, "Trần Thị Bình", "Hỗ trợ thanh toán", "Khách hỏi hướng dẫn chuyển khoản qua mã QR", DateTime.Now.AddHours(-1), "Đã giải quyết", "Đã gửi thông tin số tài khoản cho khách");
-            }
-            else if (upperSql.Contains("FROM MAYBAY"))
-            {
-                dt.Columns.Add("MaMayBay", typeof(int));
-                dt.Columns.Add("TenMayBay", typeof(string));
-                dt.Columns.Add("TrangThai", typeof(string));
-
-                dt.Rows.Add(1, "Boeing 787-9 Dreamliner", "Hoạt động");
-                dt.Rows.Add(2, "Airbus A321 Neo", "Hoạt động");
-                dt.Rows.Add(3, "Boeing 777-300ER", "Hoạt động");
-                dt.Rows.Add(4, "Airbus A350-900", "Hoạt động");
             }
             else
             {

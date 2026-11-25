@@ -15,20 +15,31 @@ namespace QuanLyVeMayBay.DAL
 
         public static bool IsMySqlAvailable => _isMySqlAvailable;
 
-        public static void InitializeDatabase()
-        {
-            if (_isInitialized) return;
+        // true nếu MySQL Server có chạy nhưng sai mật khẩu (khi đó nên hỏi người dùng nhập mật khẩu)
+        public static bool SaiMatKhau { get; private set; }
+        public static string LoiKetNoiCuoi { get; private set; } = "";
 
-            // 1. Danh sách các mật khẩu root phổ biến để tự động dò tìm
-            string[] commonPasswords = { "123456", "root", "", "admin", "1234" };
+        // matKhauNhap: mật khẩu root do người dùng nhập. null = tự dò các mật khẩu phổ biến
+        public static void InitializeDatabase(string? matKhauNhap = null)
+        {
+            if (_isMySqlAvailable || (_isInitialized && matKhauNhap == null)) return;
+
+            // 1. Danh sách các mật khẩu root phổ biến để tự động dò tìm (hoặc chỉ mật khẩu người dùng nhập)
+            string[] commonPasswords = matKhauNhap != null
+                ? new[] { matKhauNhap }
+                : new[] { "123456", "root", "", "admin", "1234" };
             string? workingPassword = null;
+            SaiMatKhau = false;
 
             foreach (var pwd in commonPasswords)
             {
                 try
                 {
-                    string testConnStr = $"Server=localhost;Port=3306;Uid=root;Pwd={pwd};Charset=utf8mb4;";
-                    using (var conn = new MySqlConnection(testConnStr))
+                    var builder = new MySqlConnectionStringBuilder
+                    {
+                        Server = "localhost", Port = 3306, UserID = "root", Password = pwd, CharacterSet = "utf8mb4"
+                    };
+                    using (var conn = new MySqlConnection(builder.ConnectionString))
                     {
                         conn.Open();
                         workingPassword = pwd;
@@ -41,16 +52,24 @@ namespace QuanLyVeMayBay.DAL
                         break;
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
                     // Thử mật khẩu tiếp theo
+                    LoiKetNoiCuoi = ex.Message;
+                    if (ex.Message.Contains("Access denied", StringComparison.OrdinalIgnoreCase))
+                        SaiMatKhau = true;
                 }
             }
 
             if (workingPassword != null)
             {
                 _isMySqlAvailable = true;
-                Database.ConnectionString = $"Server=localhost;Port=3306;Database=QuanLyDatVeMayBay;Uid=root;Pwd={workingPassword};Charset=utf8mb4;";
+                SaiMatKhau = false;
+                Database.ConnectionString = new MySqlConnectionStringBuilder
+                {
+                    Server = "localhost", Port = 3306, Database = "QuanLyDatVeMayBay",
+                    UserID = "root", Password = workingPassword, CharacterSet = "utf8mb4"
+                }.ConnectionString;
 
                 try
                 {

@@ -40,6 +40,19 @@ namespace QuanLyVeMayBay
             // 4. Tải dữ liệu ban đầu
             TaiDanhSachChuyenBay();
             TaiDanhSachGhe();
+
+            // 5. Thêm tab "Quản lý máy bay": nhúng form frmMayBay vào trong tab
+            TabPage tabMayBay = new TabPage("✈️ Quản lý máy bay");
+            frmMayBay frm = new frmMayBay
+            {
+                TopLevel = false,                        // Cho phép đặt form vào trong control khác
+                FormBorderStyle = FormBorderStyle.None,  // Bỏ viền và thanh tiêu đề
+                Dock = DockStyle.Fill
+            };
+            frm.DuLieuThayDoi += (s, ev) => TaiDanhMucMayBay(); // Máy bay thay đổi -> nạp lại ComboBox
+            tabMayBay.Controls.Add(frm);
+            tabCtrlQLCB.TabPages.Add(tabMayBay);
+            frm.Show();
         }
 
         private void CaiDatGiaoDien()
@@ -60,6 +73,7 @@ namespace QuanLyVeMayBay
             UiTheme.ApplyButtonStyle(btnCapNhatGhe, UiTheme.WarningAmber, UiTheme.WarningAmberHover, Color.White);
             UiTheme.ApplyButtonStyle(btnKhoiPhucTatCaGhe, UiTheme.SuccessGreen, UiTheme.SuccessGreenHover, Color.White);
             UiTheme.ApplyButtonStyle(btnSinhGheMau, Color.FromArgb(79, 70, 229), Color.FromArgb(67, 56, 202), Color.White);
+            UiTheme.ApplyButtonStyle(btnXoaGhe, UiTheme.DangerRose, UiTheme.DangerRoseHover, Color.White);
 
             UiTheme.ApplyDataGridStyle(dgvChuyenBay);
             UiTheme.ApplyDataGridStyle(dgvGhe);
@@ -94,8 +108,14 @@ namespace QuanLyVeMayBay
             cboTrangThaiGheMoi.Items.Add("Bảo trì");
             cboTrangThaiGheMoi.SelectedIndex = 0;
 
-            // Tải danh mục tàu bay vào ComboBox (đặt DisplayMember & ValueMember trước khi gán DataSource)
-            DataTable dtMayBay = Database.GetData("SELECT MaMayBay, TenMayBay FROM MAYBAY;");
+            TaiDanhMucMayBay();
+        }
+
+        // Tải danh mục tàu bay vào 2 ComboBox (gọi lại mỗi khi tab Quản lý máy bay thêm/sửa/xóa)
+        private void TaiDanhMucMayBay()
+        {
+            // Đặt DisplayMember & ValueMember trước khi gán DataSource
+            DataTable dtMayBay = Database.GetData("SELECT MaMayBay, TenMayBay FROM MAYBAY ORDER BY MaMayBay;");
             cboMaMayBay.DisplayMember = "TenMayBay";
             cboMaMayBay.ValueMember = "MaMayBay";
             cboMaMayBay.DataSource = dtMayBay;
@@ -143,12 +163,12 @@ namespace QuanLyVeMayBay
 
             if (!string.IsNullOrEmpty(tuKhoa))
             {
-                sql += $" AND (cb.MaChuyenBay LIKE '%{tuKhoa}%' OR cb.SanBayDi LIKE '%{tuKhoa}%' OR cb.SanBayDen LIKE '%{tuKhoa}%' OR mb.TenMayBay LIKE '%{tuKhoa}%')";
+                sql += " AND (cb.MaChuyenBay LIKE @tk OR cb.SanBayDi LIKE @tk OR cb.SanBayDen LIKE @tk OR mb.TenMayBay LIKE @tk)";
             }
 
             sql += " ORDER BY cb.ThoiGianDi DESC;";
 
-            dgvChuyenBay.DataSource = Database.GetData(sql);
+            dgvChuyenBay.DataSource = Database.GetData(sql, new MySqlParameter("@tk", $"%{tuKhoa}%"));
 
             UiTheme.SetCol(dgvChuyenBay, "MaChuyenBay", "Mã CB", width: 65, align: DataGridViewContentAlignment.MiddleCenter);
             UiTheme.SetCol(dgvChuyenBay, "MaMayBay", "Mã MB", visible: false);
@@ -181,35 +201,70 @@ namespace QuanLyVeMayBay
             txtMaChuyenBay.Text = _maChuyenBayChon.ToString();
             if (r.Cells["MaMayBay"].Value != null && r.Cells["MaMayBay"].Value != DBNull.Value)
                 cboMaMayBay.SelectedValue = Database.ToInt(r.Cells["MaMayBay"].Value);
-            cboSanBayDi.Text = r.Cells["SanBayDi"].Value?.ToString() ?? "";
-            cboSanBayDen.Text = r.Cells["SanBayDen"].Value?.ToString() ?? "";
+            // ComboBox dạng DropDownList bỏ qua giá trị không có trong danh sách -> giữ nguyên sân bay cũ
+            // và khi bấm Sửa sẽ ghi đè sai. Vì vậy thêm sân bay vào danh sách nếu chưa có.
+            ChonSanBay(cboSanBayDi, r.Cells["SanBayDi"].Value?.ToString() ?? "");
+            ChonSanBay(cboSanBayDen, r.Cells["SanBayDen"].Value?.ToString() ?? "");
             dtpThoiGianDi.Value = Database.ToDateTime(r.Cells["ThoiGianDi"].Value);
             dtpThoiGianDen.Value = Database.ToDateTime(r.Cells["ThoiGianDen"].Value);
             txtGiaVe.Text = Database.ToDecimal(r.Cells["GiaVe"].Value).ToString("0");
             cboTrangThai.Text = r.Cells["TrangThai"].Value?.ToString() ?? "Đang mở";
         }
 
-        // THÊM CHUYẾN BAY MỚI
-        private void btnThem_Click(object sender, EventArgs e)
+        private static void ChonSanBay(ComboBox cbo, string sanBay)
         {
+            if (string.IsNullOrWhiteSpace(sanBay)) return;
+            if (!cbo.Items.Contains(sanBay)) cbo.Items.Add(sanBay);
+            cbo.SelectedItem = sanBay;
+        }
+
+        // Kiểm tra dữ liệu nhập dùng chung cho Thêm và Sửa chuyến bay
+        // maChuyenBayBoQua: khi Sửa thì bỏ qua chính chuyến đang sửa lúc kiểm tra trùng lịch (Thêm thì truyền 0)
+        private bool KiemTraDuLieuChuyenBay(int maChuyenBayBoQua, out decimal giaVe)
+        {
+            giaVe = 0;
+
             if (cboSanBayDi.Text == cboSanBayDen.Text)
             {
                 MessageBox.Show("Sân bay đi và sân bay đến không được trùng nhau!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
+                return false;
             }
 
             if (dtpThoiGianDen.Value <= dtpThoiGianDi.Value)
             {
                 MessageBox.Show("Thời gian hạ cánh phải sau thời gian khởi hành!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
+                return false;
             }
 
-            decimal giaVe = 0;
             if (!decimal.TryParse(txtGiaVe.Text.Trim(), out giaVe) || giaVe <= 0)
             {
                 MessageBox.Show("Vui lòng nhập giá vé hợp lệ lớn hơn 0!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
+                return false;
             }
+
+            // UC03: Kiểm tra trùng lịch - 1 máy bay không thể bay 2 chuyến có khung giờ giao nhau
+            string sqlTrung = @"
+                SELECT COUNT(*) FROM CHUYENBAY
+                WHERE MaMayBay = @mb AND MaChuyenBay <> @id AND TrangThai <> 'Đã hủy'
+                  AND ThoiGianDi < @t2 AND ThoiGianDen > @t1;";
+            long soChuyenTrung = Database.ToLong(Database.ExecuteScalar(sqlTrung,
+                new MySqlParameter("@mb", LayMaMayBayChon(cboMaMayBay)),
+                new MySqlParameter("@id", maChuyenBayBoQua),
+                new MySqlParameter("@t1", dtpThoiGianDi.Value),
+                new MySqlParameter("@t2", dtpThoiGianDen.Value)));
+            if (soChuyenTrung > 0)
+            {
+                MessageBox.Show("Máy bay này đã có chuyến bay khác trong khung giờ này (trùng lịch)!\nVui lòng chọn máy bay khác hoặc đổi giờ bay.", "Trùng lịch", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+
+            return true;
+        }
+
+        // THÊM CHUYẾN BAY MỚI
+        private void btnThem_Click(object sender, EventArgs e)
+        {
+            if (!KiemTraDuLieuChuyenBay(0, out decimal giaVe)) return;
 
             try
             {
@@ -247,19 +302,28 @@ namespace QuanLyVeMayBay
                 return;
             }
 
-            if (dtpThoiGianDen.Value <= dtpThoiGianDi.Value)
-            {
-                MessageBox.Show("Thời gian hạ cánh phải sau thời gian khởi hành!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            decimal giaVe = 0;
-            decimal.TryParse(txtGiaVe.Text.Trim(), out giaVe);
+            if (!KiemTraDuLieuChuyenBay(_maChuyenBayChon, out decimal giaVe)) return;
+            if (!KiemTraChuyenTrangThai(out string trangThaiCu)) return;
 
             try
             {
+                // Không cho đổi tàu bay khi chuyến đã có vé: ghế trong vé thuộc tàu bay cũ sẽ không còn khớp
+                int maMayBayMoi = LayMaMayBayChon(cboMaMayBay);
+                int maMayBayCu = Database.ToInt(Database.ExecuteScalar("SELECT MaMayBay FROM CHUYENBAY WHERE MaChuyenBay = @id;",
+                    new MySqlParameter("@id", _maChuyenBayChon)));
+                if (maMayBayCu > 0 && maMayBayCu != maMayBayMoi)
+                {
+                    long soVe = Database.ToLong(Database.ExecuteScalar("SELECT COUNT(*) FROM VE WHERE MaChuyenBay = @id AND TrangThai <> 'Đã hủy';",
+                        new MySqlParameter("@id", _maChuyenBayChon)));
+                    if (soVe > 0)
+                    {
+                        MessageBox.Show($"Chuyến bay #{_maChuyenBayChon} đã có {soVe} vé đặt chỗ nên không thể đổi sang tàu bay khác!", "Từ chối", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                }
+
                 string sql = @"
-                    UPDATE CHUYENBAY 
+                    UPDATE CHUYENBAY
                     SET MaMayBay = @mb, SanBayDi = @di, SanBayDen = @den, 
                         ThoiGianDi = @t1, ThoiGianDen = @t2, GiaVe = @gia, TrangThai = @tt 
                     WHERE MaChuyenBay = @id;";
@@ -276,7 +340,10 @@ namespace QuanLyVeMayBay
                     new MySqlParameter("@tt", cboTrangThai.Text),
                     new MySqlParameter("@id", _maChuyenBayChon));
 
-                MessageBox.Show($"Cập nhật thông tin chuyến bay #{_maChuyenBayChon} thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                string thongBao = $"Cập nhật thông tin chuyến bay #{_maChuyenBayChon} thành công!";
+                if (cboTrangThai.Text == "Đã hủy" && trangThaiCu != "Đã hủy")
+                    thongBao += ChuyenVeChoCSKHKhiHuyChuyen();
+                MessageBox.Show(thongBao, "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 TaiDanhSachChuyenBay();
             }
             catch (Exception ex)
@@ -331,6 +398,14 @@ namespace QuanLyVeMayBay
                 return;
             }
 
+            if (dtpThoiGianDen.Value <= dtpThoiGianDi.Value)
+            {
+                MessageBox.Show("Thời gian hạ cánh phải sau thời gian khởi hành!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (!KiemTraChuyenTrangThai(out string trangThaiCu)) return;
+
             try
             {
                 string sql = "UPDATE CHUYENBAY SET ThoiGianDi = @t1, ThoiGianDen = @t2, TrangThai = @tt WHERE MaChuyenBay = @id;";
@@ -340,13 +415,63 @@ namespace QuanLyVeMayBay
                     new MySqlParameter("@tt", cboTrangThai.Text),
                     new MySqlParameter("@id", _maChuyenBayChon));
 
-                MessageBox.Show($"Đã cập nhật giờ bay và trạng thái chuyến bay thành '{cboTrangThai.Text}'!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                string thongBao = $"Đã cập nhật giờ bay và trạng thái chuyến bay thành '{cboTrangThai.Text}'!";
+                if (cboTrangThai.Text == "Đã hủy" && trangThaiCu != "Đã hủy")
+                    thongBao += ChuyenVeChoCSKHKhiHuyChuyen();
+
+                MessageBox.Show(thongBao, "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 TaiDanhSachChuyenBay();
             }
             catch (Exception ex)
             {
                 MessageBox.Show("Lỗi: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        // UC04: Kiểm tra phép chuyển trạng thái chuyến bay có hợp lệ không
+        // Thứ tự: Đang mở -> Sắp cất cánh -> Đã cất cánh -> Hoàn tất (không được đi ngược)
+        // "Đã hủy" chỉ được chọn khi chuyến bay chưa cất cánh. "Hoàn tất" và "Đã hủy" là trạng thái kết thúc.
+        private bool KiemTraChuyenTrangThai(out string trangThaiCu)
+        {
+            trangThaiCu = Database.ToStr(Database.ExecuteScalar("SELECT TrangThai FROM CHUYENBAY WHERE MaChuyenBay = @id;",
+                new MySqlParameter("@id", _maChuyenBayChon)));
+            string trangThaiMoi = cboTrangThai.Text;
+            if (trangThaiCu == trangThaiMoi || trangThaiCu == "") return true;
+
+            string[] thuTu = { "Đang mở", "Sắp cất cánh", "Đã cất cánh", "Hoàn tất" };
+            int viTriCu = Array.IndexOf(thuTu, trangThaiCu);
+            int viTriMoi = Array.IndexOf(thuTu, trangThaiMoi);
+
+            string? loi = null;
+            if (trangThaiCu == "Hoàn tất" || trangThaiCu == "Đã hủy")
+                loi = $"Chuyến bay đã ở trạng thái kết thúc '{trangThaiCu}', không thể đổi trạng thái nữa!";
+            else if (trangThaiMoi == "Đã hủy" && viTriCu >= 2)
+                loi = "Chuyến bay đã cất cánh, không thể hủy chuyến!";
+            else if (viTriMoi >= 0 && viTriMoi < viTriCu)
+                loi = $"Không thể chuyển ngược từ '{trangThaiCu}' về '{trangThaiMoi}'!";
+
+            if (loi != null)
+            {
+                MessageBox.Show(loi, "Chuyển trạng thái không hợp lệ", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+            return true;
+        }
+
+        // UC04 (luồng phụ 4b): Hủy chuyến -> mỗi vé còn hiệu lực sinh 1 yêu cầu đưa sang hàng đợi của bộ phận CSKH
+        private string ChuyenVeChoCSKHKhiHuyChuyen()
+        {
+            string sql = @"
+                INSERT INTO YEUCAU_CSKH (MaVe, TenKhach, LoaiYeuCau, NoiDung, NgayTao, TrangThai)
+                SELECT v.MaVe, kh.HoTen, 'Đổi chuyến bay',
+                       CONCAT('Chuyến bay #', v.MaChuyenBay, ' bị hủy. Cần liên hệ khách để đổi chuyến hoặc hủy vé & hoàn tiền.'),
+                       NOW(), 'Tiếp nhận'
+                FROM VE v JOIN KHACHHANG kh ON v.MaKH = kh.MaKH
+                WHERE v.MaChuyenBay = @id AND v.TrangThai <> 'Đã hủy';";
+            int soVe = Database.ExecuteNonQuery(sql, new MySqlParameter("@id", _maChuyenBayChon));
+            return soVe > 0
+                ? $"\n\nĐã chuyển {soVe} vé bị ảnh hưởng sang bộ phận CSKH để xử lý đổi chuyến / hoàn tiền."
+                : "";
         }
 
         private void btnLamMoi_Click(object sender, EventArgs e)
@@ -425,6 +550,41 @@ namespace QuanLyVeMayBay
             }
         }
 
+        // XÓA 1 GHẾ (chỉ xóa được khi ghế chưa từng có vé)
+        private void btnXoaGhe_Click(object sender, EventArgs e)
+        {
+            if (_maGheChon <= 0)
+            {
+                MessageBox.Show("Vui lòng chọn một ghế trong bảng cần xóa!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // Kiểm tra ghế đã có vé chưa
+            long soVe = Database.ToLong(Database.ExecuteScalar("SELECT COUNT(*) FROM VE WHERE MaGhe = @id;",
+                new MySqlParameter("@id", _maGheChon)));
+            if (soVe > 0)
+            {
+                MessageBox.Show("Ghế này đã có vé đặt nên không thể xóa! Bạn có thể chuyển ghế sang 'Bảo trì'.", "Từ chối", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (MessageBox.Show("Bạn có chắc chắn muốn xóa ghế này?", "Xác nhận xóa", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+            {
+                try
+                {
+                    Database.ExecuteNonQuery("DELETE FROM GHE WHERE MaGhe = @id;", new MySqlParameter("@id", _maGheChon));
+                    MessageBox.Show("Xóa ghế thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    _maGheChon = 0;
+                    lblGheDangChon.Text = "Ghế đang chọn: (chưa chọn)";
+                    TaiDanhSachGhe();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Lỗi xóa ghế: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
         // ĐẶT TẤT CẢ GHẾ BẢO TRÌ TRỞ LẠI CÒN TRỐNG
         private void btnKhoiPhucTatCaGhe_Click(object sender, EventArgs e)
         {
@@ -456,21 +616,33 @@ namespace QuanLyVeMayBay
                 string[] hangTG = { "A1", "A2", "B1", "B2" };
                 string[] hangPT = { "C1", "C2", "D1", "D2", "E1", "E2" };
 
+                // Chỉ thêm những ghế chưa có trên tàu bay (bấm nhiều lần không bị nhân đôi ghế A1, A2...)
+                string sqlThem = @"
+                    INSERT INTO GHE (MaMayBay, SoGhe, HangGhe, TrangThai)
+                    SELECT @mb, @so, @hang, 'Trong' FROM DUAL
+                    WHERE NOT EXISTS (SELECT 1 FROM GHE WHERE MaMayBay = @mb AND SoGhe = @so);";
+
+                int soGheThem = 0;
                 foreach (string g in hangTG)
                 {
-                    Database.ExecuteNonQuery("INSERT INTO GHE (MaMayBay, SoGhe, HangGhe, TrangThai) VALUES (@mb, @so, 'Thuong gia', 'Trong');",
+                    soGheThem += Database.ExecuteNonQuery(sqlThem,
                         new MySqlParameter("@mb", maMb),
-                        new MySqlParameter("@so", g));
+                        new MySqlParameter("@so", g),
+                        new MySqlParameter("@hang", "Thuong gia"));
                 }
 
                 foreach (string g in hangPT)
                 {
-                    Database.ExecuteNonQuery("INSERT INTO GHE (MaMayBay, SoGhe, HangGhe, TrangThai) VALUES (@mb, @so, 'Pho thong', 'Trong');",
+                    soGheThem += Database.ExecuteNonQuery(sqlThem,
                         new MySqlParameter("@mb", maMb),
-                        new MySqlParameter("@so", g));
+                        new MySqlParameter("@so", g),
+                        new MySqlParameter("@hang", "Pho thong"));
                 }
 
-                MessageBox.Show("Đã sinh danh sách ghế mẫu thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(soGheThem > 0
+                        ? $"Đã sinh thêm {soGheThem} ghế mẫu thành công!"
+                        : "Tàu bay này đã có đủ các ghế mẫu, không cần sinh thêm.",
+                    "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 TaiDanhSachGhe();
             }
             catch (Exception ex)
